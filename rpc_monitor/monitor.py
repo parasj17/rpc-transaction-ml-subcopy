@@ -13,8 +13,6 @@ RPC_ENDPOINTS = {
     "infura": os.getenv("INFURA_RPC_URL"),
     "alchemy": os.getenv("ALCHEMY_RPC_URL"),
     "publicnode": "https://ethereum-sepolia.publicnode.com",
-    "blast": "https://eth-sepolia.public.blastapi.io",
-    "ankr": "https://rpc.ankr.com/eth_sepolia"
 }
 
 # MariaDB connection
