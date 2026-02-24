@@ -1,4 +1,19 @@
-/config/.env
-__pycache__ 
+# Environment variables
+.env
+config/.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# macOS
 .DS_Store
-.env.example
+
+# Data files
+data/*.csv
+data/*.log
+
+# Virtual environments
+venv/
+.env/
