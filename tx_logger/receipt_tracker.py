@@ -1,98 +1,72 @@
-"""
-receipt_tracker.py
-
-Purpose:
-Tracks confirmations of transactions sent by sender.py.
-Computes actual mining delay using block timestamps.
-
-Input:
-data/sent_transactions.csv
-
-Output:
-data/confirmed_transactions.csv
-"""
-
-import os
 import csv
+import os
 import time
 from web3 import Web3
+from datetime import datetime
 from dotenv import load_dotenv
 
 # =========================
 # CONFIG
 # =========================
-
 load_dotenv()
 RPC_URL = os.getenv("RPC_URL")
-INPUT_FILE = "data/sent_transactions.csv"
-OUTPUT_FILE = "data/confirmed_transactions.csv"
+
+
+CSV_PATH = os.getenv("TX_OUTCOMES_CSV_PATH")
 
 # =========================
 # WEB3 SETUP
 # =========================
-
 w3 = Web3(Web3.HTTPProvider(RPC_URL))
 
-os.makedirs("data", exist_ok=True)
-
 # =========================
-# HELPER FUNCTION
+# TRACKER PROCESS
 # =========================
+print("Starting receipt tracker...")
 
-def wait_for_receipt(tx_hash):
+def process_receipts():
     """
-    Poll until transaction receipt is available.
+    Reads the CSV and updates rows that are still 'PENDING'.
     """
-    while True:
-        receipt = w3.eth.get_transaction_receipt(tx_hash)
-        if receipt:
-            return receipt
-        time.sleep(3)
+    try:
+        # Load existing data
+        rows = []
+        with open(CSV_PATH, "r") as f:
+            reader = csv.DictReader(f)
+            fieldnames = reader.fieldnames
+            for row in reader:
+                if row["block_number"] == "PENDING":
+                    print(f"Tracking receipt for: {row['tx_hash']}")
+                    try:
+                        # Wait for receipt (same logic as wait_for_transaction_receipt)
+                        receipt = w3.eth.wait_for_transaction_receipt(row["tx_hash"], timeout=120)
+                        confirmation_time = datetime.utcnow()
+                        
+                        # Calculate delay
+                        send_time = datetime.fromisoformat(row["send_time"])
+                        delay = (confirmation_time - send_time).total_seconds()
 
-# =========================
-# MAIN PROCESS
-# =========================
+                        # Update the row data
+                        row["block_number"] = receipt.blockNumber
+                        row["confirmation_time"] = confirmation_time.isoformat()
+                        row["confirmation_delay_seconds"] = delay
+                        print(f"Confirmed in block: {receipt.blockNumber}")
+                    except Exception as e:
+                        print(f"Could not confirm {row['tx_hash']}: {e}")
+                
+                rows.append(row)
 
-with open(INPUT_FILE, "r") as infile, open(OUTPUT_FILE, "w", newline="") as outfile:
+        # Write updated data back to CSV
+        with open(CSV_PATH, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
 
-    reader = csv.DictReader(infile)
-    writer = csv.writer(outfile)
+    except FileNotFoundError:
+        print("CSV file not found. Wait for sender to create it.")
 
-    writer.writerow([
-        "rpc_url",
-        "tx_hash",
-        "send_time",
-        "block_timestamp",
-        "block_number",
-        "mining_delay_seconds"
-    ])
-
-    for row in reader:
-        tx_hash = row["tx_hash"]
-        send_time = row["send_time"]
-
-        print("Waiting for confirmation:", tx_hash)
-
-        try:
-            receipt = wait_for_receipt(tx_hash)
-            block = w3.eth.get_block(receipt.blockNumber)
-            block_timestamp = block.timestamp
-
-            mining_delay = block_timestamp - int(datetime.fromisoformat(send_time).timestamp())
-
-            writer.writerow([
-                row["rpc_url"],
-                tx_hash,
-                send_time,
-                block_timestamp,
-                receipt.blockNumber,
-                mining_delay
-            ])
-
-            print(f"Confirmed in block {receipt.blockNumber}, delay: {mining_delay} seconds")
-
-        except Exception as e:
-            print("Error while tracking receipt:", e)
-            continue
-
-print("\nFinished tracking all transactions.")
+# Run the tracker periodically
+while True:
+    process_receipts()
+    print("Cycle complete. Checking for new pending transactions in 30 seconds...")
+    time.sleep(30)
