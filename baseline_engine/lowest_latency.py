@@ -21,7 +21,7 @@ ORDER BY recent_avg ASC
 df = pd.read_sql(query, engine)
 
 if not df.empty:
-    best_rpc = df.iloc[0]["rpc_id"]
-    print("Best RPC right now:", best_rpc)
+    print(df)
+    print("Selected RPC:", df.iloc[0]["rpc_id"])
 else:
-    print("No recent data found.")
+    print("No recent data.")
